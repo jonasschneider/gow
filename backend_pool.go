@@ -1,8 +1,8 @@
 package gow
 
 import (
-  "os"
   "regexp"
+  "log"
 )
 
 type BackendPool struct {
@@ -16,12 +16,13 @@ func NewBackendPool() *BackendPool {
 func (p *BackendPool) Select(host string) (string, error) {
   name := appNameFromHost(host)
   var address string
+  p.restartIfRequested(name)
   backend := p.backends[name]
 
   if backend != nil {
     address = backend.Address()
   } else {
-    backend, err := SpawnBackend(os.Getenv("HOME")+"/.pow/"+name)
+    backend, err := SpawnBackend(name)
 
     if err == nil {
       p.backends[name] = backend
@@ -32,6 +33,23 @@ func (p *BackendPool) Select(host string) (string, error) {
   }
 
   return address, nil
+}
+
+func (p *BackendPool) restartIfRequested(name string) error {
+  if p.backends[name] == nil || !p.backends[name].IsRestartRequested() {
+    return nil
+  }
+  log.Println("restarting",name)
+
+  p.backends[name].Close()
+
+  refreshed_backend, err := SpawnBackend(name)
+
+  if err != nil { return err }
+
+  p.backends[name] = refreshed_backend
+
+  return nil
 }
 
 func (p *BackendPool) Close() {

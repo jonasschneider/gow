@@ -16,6 +16,7 @@ type Backend struct {
   appPath string
   port int
   process *os.Process
+  startedAt time.Time
 }
 
 func (b *Backend) Close() {
@@ -23,7 +24,14 @@ func (b *Backend) Close() {
   b.process.Signal(syscall.SIGTERM)
 }
 
-func SpawnBackend(pathToApp string) (*Backend, error) {
+func (b *Backend) IsRestartRequested() bool {
+  fi, err := os.Stat(b.appPath+"/tmp/restart.txt")
+  if err != nil { return false }
+  return fi.ModTime().After(b.startedAt)
+}
+
+func SpawnBackend(appName string) (*Backend, error) {
+  pathToApp := appDir(appName)
   port, err := getFreeTCPPort()
   log.Println("Spawning",pathToApp,"on port",port)
   if err != nil { return nil, err }
@@ -40,7 +48,7 @@ func SpawnBackend(pathToApp string) (*Backend, error) {
   if err != nil {
     return nil, err
   }
-  b := &Backend{appPath: pathToApp, port: port, process: cmd.Process}
+  b := &Backend{appPath: pathToApp, port: port, process: cmd.Process, startedAt: time.Now()}
 
   select {
   case <-awaitTCP(b.Address()):
@@ -79,4 +87,8 @@ func getFreeTCPPort() (port int, err error) {
   port = l.Addr().(*net.TCPAddr).Port
   l.Close()
   return port, nil
+}
+
+func appDir(name string) string {
+  return os.Getenv("HOME")+"/.pow/"+name
 }
