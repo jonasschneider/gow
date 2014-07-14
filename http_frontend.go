@@ -23,8 +23,6 @@ type BackendSelector interface {
 	Select(requestHost string) (string, error)
 }
 
-var ShutdownChan = make(chan bool, 1)
-
 func ListenAndServeHTTP(address string, sel BackendSelector) error {
 	proxyHandler := http.HandlerFunc(makeProxyHandlerFunc(sel))
 	return http.ListenAndServe(address, proxyHandler)
@@ -40,7 +38,6 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
 			// serve error
 			w.WriteHeader(500)
 			w.Write([]byte("Failed to spawn backend: "))
-			w.Write([]byte(os.Getenv("PATH")))
 			w.Write([]byte(err.Error()))
 		}
 	}

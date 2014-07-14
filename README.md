@@ -21,6 +21,11 @@ So, why not combine both? Gow works just like Pow, as a DNS proxy that resolves 
 
 If you're on OS X, Gow provides Pow-like easy installation; run the provided `dist/install.sh` script to get started. On Linux, you might want to take a look at the install script for a snippet to steal to run Gow as a `daemontools` service, but you're going to have to fiddle with `/etc/resolv.conf` yourself.
 
+Caveats
+-------
+
+It probably breaks horribly if you try to use Websockets or other `Connection: Upgrade` fanciness.
+
 Since launchd's logging is kinda shitty/dysfunctional, Gow writes its own log file to `~/Library/Logs/gowd.log`.
 
 License
