@@ -20,17 +20,17 @@ func main() {
 
   pool := gow.NewBackendPool()
 
-  c := make(chan os.Signal, 1)
-  signal.Notify(c, os.Interrupt)
+  termchan := make(chan os.Signal, 2)
+  signal.Notify(termchan, os.Interrupt, syscall.SIGTERM)
   go func(){
-      for _ = range c {
+      for sig := range termchan {
+        log.Printf("received %#v, shutting down..", sig)
         pool.Close()
+        log.Println("exiting.")
         os.Exit(0)
       }
   }()
 
-  termchan := make(chan os.Signal, 2)
-  signal.Notify(termchan, os.Interrupt, syscall.SIGTERM)
-
+  log.Println("Ready!")
   log.Fatalln(gow.ListenAndServeHTTP("127.0.0.1:20559", pool))
 }

@@ -3,6 +3,7 @@ package gow
 import (
   "net/http"
   "log"
+  "os"
   "io"
 )
 
@@ -38,7 +39,8 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
     } else {
       // serve error
       w.WriteHeader(500)
-      w.Write([]byte("Failed to spawn proxy: "))
+      w.Write([]byte("Failed to spawn backend: "))
+      w.Write([]byte(os.Getenv("PATH")))
       w.Write([]byte(err.Error()))
     }
   }

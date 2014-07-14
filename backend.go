@@ -9,6 +9,8 @@ import (
   "errors"
   "log"
   "syscall"
+  "io/ioutil"
+  "path/filepath"
 )
 
 
@@ -40,8 +42,23 @@ func SpawnBackend(appName string) (*Backend, error) {
   if err != nil { return nil, err }
 
   env := os.Environ()
-  env = append(env, "PORT="+strconv.Itoa(port))
-  cmd := exec.Command("foreman", "start", "web")
+
+  pathbytes, err := ioutil.ReadFile(os.Getenv("HOME")+"/.pow/.path")
+  path := os.Getenv("PATH")
+  if err == nil {
+    path = string(pathbytes)
+  } else {
+    log.Println("while reading path file:",err)
+  }
+  env = append(env, "PATH="+path)
+
+  gobin, err := filepath.Abs(filepath.Dir(os.Args[0]))
+  if err != nil {
+    log.Println("while determining GOPATH:",err)
+    gobin = "."
+  }
+  cmd := exec.Command(gobin+"/forego", "start", "-p", strconv.Itoa(port), "web")
+
   cmd.Stdout = os.Stdout // TODO: logging
   cmd.Stderr = os.Stderr
   cmd.Dir = pathToApp
