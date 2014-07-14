@@ -18,6 +18,7 @@ type Backend struct {
   process *os.Process
   startedAt time.Time
   exited bool
+  activityChan chan interface{}
 }
 
 func (b *Backend) Close() {
@@ -51,7 +52,7 @@ func SpawnBackend(appName string) (*Backend, error) {
     return nil, err
   }
 
-  b := &Backend{appPath: pathToApp, port: port, process: cmd.Process, startedAt: time.Now()}
+  b := &Backend{appPath: pathToApp, port: port, process: cmd.Process, startedAt: time.Now(), activityChan: make(chan interface{})}
 
   crashChan := make(chan error, 1)
   go func() {
@@ -66,6 +67,8 @@ func SpawnBackend(appName string) (*Backend, error) {
   select {
   case <- awaitTCP(b.Address()):
     log.Println(pathToApp,"came up successfully")
+    go b.watchForActivity()
+
     return b, nil
   case <- time.After(30 * time.Second):
     log.Println(pathToApp,"failed to bind")
@@ -77,8 +80,36 @@ func SpawnBackend(appName string) (*Backend, error) {
   }
 }
 
+func (b *Backend) Touch() {
+  if b.activityChan != nil {
+    b.activityChan <- new(interface{})
+  }
+}
+
 func (b *Backend) Address() string {
   return "localhost:"+strconv.Itoa(b.port)
+}
+
+// Close the backend after inactivity
+func (b *Backend) watchForActivity() {
+  outer: for {
+    select {
+    case _, ok := <- b.activityChan:
+      if ok {
+        continue
+      } else {
+        b.Close()
+        b.activityChan = nil
+        break outer
+      }
+
+    case <- time.After(30 * time.Minute):
+      log.Println(b.appPath,"backend idling.")
+      b.Close()
+      b.activityChan = nil
+      break outer
+    }
+  }
 }
 
 func awaitTCP(address string) chan bool {

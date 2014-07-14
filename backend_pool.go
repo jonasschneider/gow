@@ -15,24 +15,24 @@ func NewBackendPool() *BackendPool {
 
 func (p *BackendPool) Select(host string) (string, error) {
   name := appNameFromHost(host)
-  var address string
+  var err error
   p.restartIfRequested(name)
+
   backend := p.backends[name]
 
-  if backend != nil {
-    address = backend.Address()
-  } else {
-    backend, err := SpawnBackend(name)
+  if backend == nil {
+    backend, err = SpawnBackend(name)
 
     if err == nil {
       p.backends[name] = backend
-      address = backend.Address()
     } else {
       return "", err
     }
   }
 
-  return address, nil
+  backend.Touch()
+
+  return backend.Address(), nil
 }
 
 func (p *BackendPool) restartIfRequested(name string) error {
