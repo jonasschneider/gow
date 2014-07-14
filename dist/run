@@ -1,0 +1,3 @@
+#!/bin/bash
+cd HOME
+exec .pow/.dist/gowd

@@ -16,10 +16,5 @@ func main() {
   }()
 
   p := gow.NewBackendPool()
-
-  gow.ListenAndServeHTTP("127.0.0.1:20559", p)
-
-  log.Println("spawned all the things")
-
-  <- errors
+  log.Fatalln(gow.ListenAndServeHTTP("127.0.0.1:20559", p))
 }

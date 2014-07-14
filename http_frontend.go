@@ -23,9 +23,9 @@ type BackendSelector interface {
   Select(requestHost string) (string, error)
 }
 
-func ListenAndServeHTTP(address string, sel BackendSelector) {
+func ListenAndServeHTTP(address string, sel BackendSelector) error {
   proxyHandler := http.HandlerFunc(makeProxyHandlerFunc(sel))
-  http.ListenAndServe(address, proxyHandler)
+  return http.ListenAndServe(address, proxyHandler)
 }
 
 func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.Request) {
