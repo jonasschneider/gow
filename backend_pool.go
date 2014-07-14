@@ -2,6 +2,7 @@ package gow
 
 import (
   "os"
+  "regexp"
 )
 
 type BackendPool struct {
@@ -12,7 +13,8 @@ func NewBackendPool() *BackendPool {
   return &BackendPool{backends: make(map[string]*Backend) }
 }
 
-func (p *BackendPool) Select(name string) (string, error) {
+func (p *BackendPool) Select(host string) (string, error) {
+  name := appNameFromHost(host)
   var address string
   backend := p.backends[name]
 
@@ -30,4 +32,16 @@ func (p *BackendPool) Select(name string) (string, error) {
   }
 
   return address, nil
+}
+
+func (p *BackendPool) Close() {
+  for k := range p.backends {
+    p.backends[k].Close()
+  }
+}
+
+var hostRegex = regexp.MustCompile("([a-z_\\-0-9A-Z]+)")
+
+func appNameFromHost(host string) string {
+  return hostRegex.FindString(host)
 }

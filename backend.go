@@ -8,13 +8,19 @@ import (
   "time"
   "errors"
   "log"
+  "syscall"
 )
 
 
 type Backend struct {
   appPath string
   port int
-  process *exec.Cmd
+  process *os.Process
+}
+
+func (b *Backend) Close() {
+  log.Println("Terminating",b.appPath,"pid",b.process.Pid)
+  b.process.Signal(syscall.SIGTERM)
 }
 
 func SpawnBackend(pathToApp string) (*Backend, error) {
@@ -34,7 +40,7 @@ func SpawnBackend(pathToApp string) (*Backend, error) {
   if err != nil {
     return nil, err
   }
-  b := &Backend{appPath: pathToApp, port: port, process: cmd}
+  b := &Backend{appPath: pathToApp, port: port, process: cmd.Process}
 
   select {
   case <-awaitTCP(b.Address()):

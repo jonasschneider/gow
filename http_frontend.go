@@ -4,7 +4,6 @@ import (
   "net/http"
   "log"
   "io"
-  "regexp"
 )
 
 // headers to drop
@@ -23,6 +22,8 @@ type BackendSelector interface {
   Select(requestHost string) (string, error)
 }
 
+var ShutdownChan = make(chan bool, 1)
+
 func ListenAndServeHTTP(address string, sel BackendSelector) error {
   proxyHandler := http.HandlerFunc(makeProxyHandlerFunc(sel))
   return http.ListenAndServe(address, proxyHandler)
@@ -30,8 +31,7 @@ func ListenAndServeHTTP(address string, sel BackendSelector) error {
 
 func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.Request) {
   return func(w http.ResponseWriter, r *http.Request) {
-    appName := appNameFromHost(r.Host)
-    backend, err := sel.Select(appName)
+    backend, err := sel.Select(r.Host)
 
     if err == nil {
       proxyRequest(w, r, backend)
@@ -41,11 +41,6 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
   }
 }
 
-var hostRegex = regexp.MustCompile("([a-z_\\-0-9A-Z]+)")
-
-func appNameFromHost(host string) string {
-  return hostRegex.FindString(host)
-}
 
 func proxyRequest(w http.ResponseWriter, r *http.Request, backendAddress string) {
   // TODO: we should also filter request hop headers
