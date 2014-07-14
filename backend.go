@@ -17,6 +17,7 @@ type Backend struct {
   port int
   process *os.Process
   startedAt time.Time
+  exited bool
 }
 
 func (b *Backend) Close() {
@@ -25,6 +26,7 @@ func (b *Backend) Close() {
 }
 
 func (b *Backend) IsRestartRequested() bool {
+  if b.exited { return true }
   fi, err := os.Stat(b.appPath+"/tmp/restart.txt")
   if err != nil { return false }
   return fi.ModTime().After(b.startedAt)
@@ -48,16 +50,30 @@ func SpawnBackend(appName string) (*Backend, error) {
   if err != nil {
     return nil, err
   }
+
   b := &Backend{appPath: pathToApp, port: port, process: cmd.Process, startedAt: time.Now()}
 
+  crashChan := make(chan error, 1)
+  go func() {
+    crash := cmd.Wait()
+    b.exited = true
+
+    if crash != nil {
+      crashChan <- crash
+    }
+  }()
+
   select {
-  case <-awaitTCP(b.Address()):
+  case <- awaitTCP(b.Address()):
     log.Println(pathToApp,"came up successfully")
     return b, nil
-  case <-time.After(30 * time.Second):
+  case <- time.After(30 * time.Second):
     log.Println(pathToApp,"failed to bind")
     cmd.Process.Kill()
     return nil, errors.New("app failed to bind")
+  case crash := <-crashChan:
+    log.Println(pathToApp,"crashed while starting")
+    return nil, crash
   }
 }
 

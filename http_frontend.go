@@ -37,6 +37,9 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
       proxyRequest(w, r, backend)
     } else {
       // serve error
+      w.WriteHeader(500)
+      w.Write([]byte("Failed to spawn proxy: "))
+      w.Write([]byte(err.Error()))
     }
   }
 }
