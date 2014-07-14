@@ -1,5 +1,5 @@
-Gow: A [Pow](http://pow.cx) fork/re-implementation in Go
-========================================================
+Gow: A [Pow](http://pow.cx) fork for `Procfile`s
+================================================
 
 Synopsis
 --------
