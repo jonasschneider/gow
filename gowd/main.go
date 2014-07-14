@@ -15,7 +15,9 @@ func main() {
     }
   }()
 
-  gow.SpawnBackend("/Users/jonas/code/telpit")
+  p := gow.NewBackendPool()
+
+  gow.ListenAndServeHTTP("127.0.0.1:20559", p)
 
   log.Println("spawned all the things")
 

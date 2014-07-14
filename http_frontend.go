@@ -1,0 +1,83 @@
+package gow
+
+import (
+  "net/http"
+  "log"
+  "io"
+  "regexp"
+)
+
+// headers to drop
+var hopHeaders = []string{
+  "Connection",
+  "Keep-Alive",
+  "Proxy-Authenticate",
+  "Proxy-Authorization",
+  "Te", // canonicalized version of "TE"
+  "Trailers",
+  "Transfer-Encoding",
+  "Upgrade",
+}
+
+type BackendSelector interface {
+  Select(requestHost string) (string, error)
+}
+
+func ListenAndServeHTTP(address string, sel BackendSelector) {
+  proxyHandler := http.HandlerFunc(makeProxyHandlerFunc(sel))
+  http.ListenAndServe(address, proxyHandler)
+}
+
+func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.Request) {
+  return func(w http.ResponseWriter, r *http.Request) {
+    appName := appNameFromHost(r.Host)
+    backend, err := sel.Select(appName)
+
+    if err == nil {
+      proxyRequest(w, r, backend)
+    } else {
+      // serve error
+    }
+  }
+}
+
+var hostRegex = regexp.MustCompile("([a-z_\\-0-9A-Z]+)")
+
+func appNameFromHost(host string) string {
+  return hostRegex.FindString(host)
+}
+
+func proxyRequest(w http.ResponseWriter, r *http.Request, backendAddress string) {
+  // TODO: we should also filter request hop headers
+
+  r.RequestURI = ""
+  r.URL.Scheme = "http"
+  r.URL.Host = backendAddress
+
+  resp, err := http.DefaultTransport.RoundTrip(r)
+
+  if err != nil {
+    log.Println(err)
+    w.WriteHeader(502)
+    w.Write([]byte{})
+  } else {
+    for k := range(resp.Header) {
+      found := false
+      for i := range hopHeaders {
+        if k == hopHeaders[i] {
+          found = true
+          break
+        }
+      }
+      if !found {
+        w.Header()[k] = resp.Header[k]
+      }
+    }
+    w.Header().Set("X-Forwarded-For", "127.0.0.1")
+    w.WriteHeader(resp.StatusCode)
+    _, err := io.Copy(w, resp.Body)
+    if err != nil {
+      log.Println(err)
+    }
+  }
+}

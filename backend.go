@@ -5,6 +5,9 @@ import (
   "os"
   "strconv"
   "net"
+  "time"
+  "errors"
+  "log"
 )
 
 
@@ -16,6 +19,7 @@ type Backend struct {
 
 func SpawnBackend(pathToApp string) (*Backend, error) {
   port, err := getFreeTCPPort()
+  log.Println("Spawning",pathToApp,"on port",port)
   if err != nil { return nil, err }
 
   env := os.Environ()
@@ -30,14 +34,43 @@ func SpawnBackend(pathToApp string) (*Backend, error) {
   if err != nil {
     return nil, err
   }
+  b := &Backend{appPath: pathToApp, port: port, process: cmd}
 
-  return &Backend{appPath: pathToApp, port: port, process: cmd}, nil
+  select {
+  case <-awaitTCP(b.Address()):
+    log.Println(pathToApp,"came up successfully")
+    return b, nil
+  case <-time.After(30 * time.Second):
+    log.Println(pathToApp,"failed to bind")
+    cmd.Process.Kill()
+    return nil, errors.New("app failed to bind")
+  }
+}
+
+func (b *Backend) Address() string {
+  return "localhost:"+strconv.Itoa(b.port)
+}
+
+func awaitTCP(address string) chan bool {
+  c := make(chan bool)
+  go func() {
+    for {
+      _, err := net.Dial("tcp", address)
+      if err == nil {
+        c <- true
+        break
+      }
+      time.Sleep(200 * time.Millisecond)
+    }
+  }()
+  return c
 }
 
 func getFreeTCPPort() (port int, err error) {
   // We still have a small race condition here, but meh.
-  l, err := net.Listen("tcp", "127.0.0.1:0") // listen on localhost
+  l, err := net.Listen("tcp", "localhost:0")
   if err != nil { return 0, err }
   port = l.Addr().(*net.TCPAddr).Port
+  l.Close()
   return port, nil
 }
