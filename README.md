@@ -3,7 +3,7 @@ Gow: A [Pow](http://pow.cx) fork for `Procfile` apps
 
 Synopsis
 --------
-Gow is a zero-config Rack server for Mac OS X. Have it serving your apps locally in under a minute.
+Gow is a zero-config development application server for Mac OS X. Have it serving your apps locally in under a minute.
 
       # do you trust me? if not, clone and read!
     $ curl https://raw.githubusercontent.com/jonasschneider/gow/master/dist/install.sh | sh
