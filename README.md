@@ -1,4 +1,4 @@
-Gow: A [Pow](http://pow.cx) fork for `Procfile`s
+Gow: A [Pow](http://pow.cx) fork for `Procfile` apps
 ================================================
 
 Synopsis
