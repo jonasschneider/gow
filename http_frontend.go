@@ -4,7 +4,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 )
 
 // headers to drop
