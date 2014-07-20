@@ -3,10 +3,12 @@ package gow
 import (
 	"log"
 	"regexp"
+	"sync"
 )
 
 type BackendPool struct {
 	backends map[string]*Backend
+	mtx      *sync.Mutex
 }
 
 func NewBackendPool() *BackendPool {
@@ -14,6 +16,12 @@ func NewBackendPool() *BackendPool {
 }
 
 func (p *BackendPool) Select(host string) (string, error) {
+	// Yes, we are this crazy. Lock the mutex during the entire lookup time, which could potentially include
+	// (re)spawning an application. Serialize all of this so that we never have to deal with thundering-herd
+	// spawns and such.
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+
 	name := appNameFromHost(host)
 	var err error
 	p.restartIfRequested(name)
