@@ -8,7 +8,7 @@ import (
 
 type BackendPool struct {
 	backends map[string]*Backend
-	mtx      *sync.Mutex
+	mtx      sync.Mutex
 }
 
 func NewBackendPool() *BackendPool {
