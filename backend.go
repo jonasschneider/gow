@@ -2,6 +2,7 @@ package gow
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -9,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"time"
 )
 
@@ -24,7 +24,26 @@ type Backend struct {
 
 func (b *Backend) Close() {
 	log.Println("Terminating", b.appPath, "pid", b.process.Pid)
-	b.process.Signal(syscall.SIGTERM)
+
+	done := make(chan interface{})
+
+	go func() {
+		b.process.Wait()
+		close(done)
+	}()
+
+	// so sorry for this: SIGTERM the forego child process, not (a) forego itself, and (b) not the shell forego spawns
+	shellcmd := fmt.Sprintf("/usr/local/bin/pstree %d|sed 's/^[^0-9]*//'| grep -v forego| grep -v .profile | cut -d ' ' -f 1|xargs kill; echo done", b.process.Pid)
+	cmd := exec.Command("bash", "-c", shellcmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("failed to kill process: ", err, string(out))
+		return
+	}
+
+	<-done
+
+	log.Println("Terminated", b.appPath)
 }
 
 func (b *Backend) IsRestartRequested() bool {
@@ -85,6 +104,8 @@ func SpawnBackend(appName string) (*Backend, error) {
 			crashChan <- crash
 		}
 	}()
+
+	log.Println("waiting for spawn result for", pathToApp)
 
 	select {
 	case <-awaitTCP(b.Address()):

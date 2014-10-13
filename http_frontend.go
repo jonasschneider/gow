@@ -82,7 +82,7 @@ func proxyWebsocket(w http.ResponseWriter, clientRequest *http.Request) {
 
 	upstream_conn, resp, err := websocket.DefaultDialer.Dial(clientRequest.URL.String(), clientRequest.Header)
 	if err != nil {
-		log.Println(err)
+		log.Println(err, resp)
 		w.WriteHeader(502)
 		w.Write([]byte{})
 		return
@@ -103,35 +103,34 @@ func proxyWebsocket(w http.ResponseWriter, clientRequest *http.Request) {
 	go func() {
 		for {
 			messageType, p, err := client_conn.ReadMessage()
-	    if err != nil {
-	       log.Println("error while reading from client:",err)
-	       break
-	    }
-	    if err = upstream_conn.WriteMessage(messageType, p); err != nil {
-	    	log.Println("error while writing to upstream:",err)
-	    	break
-	    }
-	  }
-	  upstream_conn.Close()
+			if err != nil {
+				log.Println("error while reading from client:", err)
+				break
+			}
+			if err = upstream_conn.WriteMessage(messageType, p); err != nil {
+				log.Println("error while writing to upstream:", err)
+				break
+			}
+		}
+		upstream_conn.Close()
 	}()
 
 	go func() {
 		for {
 			messageType, p, err := upstream_conn.ReadMessage()
-	    if err != nil {
-	       log.Println("error while reading from upstream:",err)
-	       break
-	    }
-	    if err = client_conn.WriteMessage(messageType, p); err != nil {
-	    	log.Println("error while writing to client:",err)
-	    	break
-	    }
-	  }
+			if err != nil {
+				log.Println("error while reading from upstream:", err)
+				break
+			}
+			if err = client_conn.WriteMessage(messageType, p); err != nil {
+				log.Println("error while writing to client:", err)
+				break
+			}
+		}
 
-	  client_conn.Close()
+		client_conn.Close()
 	}()
 }
-
 
 func writeResponseHeader(w http.ResponseWriter, r *http.Response) {
 	for k := range r.Header {
@@ -151,4 +150,3 @@ func writeResponseHeader(w http.ResponseWriter, r *http.Response) {
 	w.Header().Set("X-Forwarded-For", "127.0.0.1")
 	w.WriteHeader(r.StatusCode)
 }
-
