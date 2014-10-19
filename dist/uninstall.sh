@@ -9,11 +9,8 @@ rm "$HOME/.pow/.path"
 sudo launchctl unload /Library/LaunchDaemons/com.jonasschneider.gow.firewall.plist
 sudo rm -f /Library/LaunchDaemons/com.jonasschneider.gow.firewall.plist
 
-# Try to find the ipfw rule and delete it.
-HTTP_PORT=20559
-DST_PORT=80
-RULE=$(sudo ipfw show | (grep ",$HTTP_PORT .* dst-port $DST_PORT in" || true) | cut -f 1 -d " ")
-[[ -n "$RULE" ]] && sudo ipfw del "$RULE"
+# Try to find the firewall rule and delete it.
+sudo pfctl -a com.apple/250.PowFirewall -F nat 2>/dev/null || true
 
 #
 # DNS

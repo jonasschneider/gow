@@ -28,9 +28,9 @@ sudo tee /Library/LaunchDaemons/com.jonasschneider.gow.firewall.plist > /dev/nul
   <string>com.jonasschneider.gow.firewall</string>
   <key>ProgramArguments</key>
   <array>
-    <string>sh</string>
+    <string>/bin/sh</string>
     <string>-c</string>
-    <string>ipfw add fwd 127.0.0.1,20559 tcp from any to me dst-port 80 in &amp;&amp; sysctl -w net.inet.ip.forwarding=1 &amp;&amp; sysctl -w net.inet.ip.fw.enable=1</string>
+    <string>echo "rdr pass inet proto tcp from any to self port {80,20559} -> 127.0.0.1 port 20559" | pfctl -a "com.apple/250.PowFirewall" -f - -E</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
