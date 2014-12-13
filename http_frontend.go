@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net"
 
 	"github.com/gorilla/websocket"
 )
@@ -49,15 +50,16 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
 
 func proxyRequest(w http.ResponseWriter, r *http.Request, backendAddress string) {
 	r.RequestURI = ""
-	r.URL.Scheme = "http"
-	r.URL.Host = backendAddress
 
 	if r.Header["Connection"] != nil && r.Header["Connection"][0] == "Upgrade" &&
 		r.Header["Upgrade"] != nil && r.Header["Upgrade"][0] == "websocket" {
 		log.Println("websocket connection requested by client; doing things")
-		proxyWebsocket(w, r)
+		proxyWebsocket(w, r, backendAddress)
 		return
 	}
+
+	r.URL.Scheme = "http"
+	r.URL.Host = backendAddress
 
 	resp, err := http.DefaultTransport.RoundTrip(r)
 
@@ -77,10 +79,21 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, backendAddress string)
 	}
 }
 
-func proxyWebsocket(w http.ResponseWriter, clientRequest *http.Request) {
+func proxyWebsocket(w http.ResponseWriter, clientRequest *http.Request, backendAddress string) {
 	clientRequest.URL.Scheme = "ws"
 
-	upstream_conn, resp, err := websocket.DefaultDialer.Dial(clientRequest.URL.String(), clientRequest.Header)
+	log.Println("setting it")
+
+	f := func(theNet, addr string) (net.Conn, error) {
+		return net.Dial(theNet, backendAddress)
+	}
+
+	log.Println("made literal")
+	d := websocket.Dialer{NetDial: f}
+
+	log.Println("set it")
+
+	upstream_conn, resp, err := d.Dial(clientRequest.URL.String(), clientRequest.Header)
 	if err != nil {
 		log.Println(err, resp)
 		w.WriteHeader(502)

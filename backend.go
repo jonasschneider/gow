@@ -130,7 +130,7 @@ func (b *Backend) Touch() {
 }
 
 func (b *Backend) Address() string {
-	return "localhost:" + strconv.Itoa(b.port)
+	return "127.0.0.1:" + strconv.Itoa(b.port)
 }
 
 // Close the backend after inactivity
