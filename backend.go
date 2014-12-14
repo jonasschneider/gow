@@ -94,14 +94,14 @@ func SpawnBackend(appName string) (*Backend, error) {
 	}
 
 	b := &Backend{appPath: pathToApp, port: port, process: cmd.Process, startedAt: time.Now(), activityChan: make(chan interface{})}
-
+	booting := true
 	crashChan := make(chan error, 1)
 	go func() {
-		crash := cmd.Wait()
+		cmd.Wait()
 		b.exited = true
 
-		if crash != nil {
-			crashChan <- crash
+		if booting {
+			crashChan <- fmt.Errorf("app exited during boot")
 		}
 	}()
 
@@ -110,6 +110,7 @@ func SpawnBackend(appName string) (*Backend, error) {
 	select {
 	case <-awaitTCP(b.Address()):
 		log.Println(pathToApp, "came up successfully")
+		booting = false
 		go b.watchForActivity()
 
 		return b, nil

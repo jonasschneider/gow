@@ -19,6 +19,7 @@ func (p *BackendPool) Select(host string) (string, error) {
 	// Yes, we are this crazy. Lock the mutex during the entire lookup time, which could potentially include
 	// (re)spawning an application. Serialize all of this so that we never have to deal with thundering-herd
 	// spawns and such.
+	// TODO: we could at least lock the spawn process by app name
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
