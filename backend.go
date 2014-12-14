@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+	"bytes"
+	"io"
 )
 
 type Backend struct {
@@ -57,6 +59,13 @@ func (b *Backend) IsRestartRequested() bool {
 	return fi.ModTime().After(b.startedAt)
 }
 
+type BootCrash struct {
+	Log bytes.Buffer
+}
+func (b BootCrash) Error() string {
+	return "app crashed during boot"
+}
+
 func SpawnBackend(appName string) (*Backend, error) {
 	pathToApp := appDir(appName)
 	port, err := getFreeTCPPort()
@@ -83,8 +92,12 @@ func SpawnBackend(appName string) (*Backend, error) {
 	}
 	cmd := exec.Command(gobin+"/forego", "start", "-p", strconv.Itoa(port), "web")
 
-	cmd.Stdout = os.Stdout // TODO: logging
-	cmd.Stderr = os.Stderr
+	var bootlog bytes.Buffer
+
+	toStderrWithCapture := io.MultiWriter(os.Stderr, &bootlog)
+
+	cmd.Stdout = toStderrWithCapture // never write to gowd's stdout
+	cmd.Stderr = toStderrWithCapture
 	cmd.Dir = pathToApp
 	cmd.Env = env
 
@@ -101,7 +114,7 @@ func SpawnBackend(appName string) (*Backend, error) {
 		b.exited = true
 
 		if booting {
-			crashChan <- fmt.Errorf("app exited during boot")
+			crashChan <- BootCrash{Log: bootlog}
 		}
 	}()
 
@@ -118,9 +131,9 @@ func SpawnBackend(appName string) (*Backend, error) {
 		log.Println(pathToApp, "failed to bind")
 		cmd.Process.Kill()
 		return nil, errors.New("app failed to bind")
-	case crash := <-crashChan:
+	case err := <-crashChan:
 		log.Println(pathToApp, "crashed while starting")
-		return nil, crash
+		return nil, err
 	}
 }
 

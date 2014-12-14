@@ -40,10 +40,20 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
 		if err == nil {
 			proxyRequest(w, r, backend)
 		} else {
-			// serve error
-			w.WriteHeader(500)
-			w.Write([]byte("Failed to spawn backend: "))
-			w.Write([]byte(err.Error()))
+			crash, ok := err.(BootCrash)
+			if ok {
+				w.Header()["Content-Type"] = []string{"text/html"}
+				w.WriteHeader(500)
+
+				w.Write([]byte("<h1>App crashed during boot :(</h1><pre id=log>"))
+				crash.Log.WriteTo(w)
+				w.Write([]byte("</pre>"))
+				w.Write([]byte(terminalFormattingPostamble))
+			} else {
+				w.WriteHeader(500)
+				w.Write([]byte("Failed to spawn backend: "))
+				w.Write([]byte(err.Error()))
+			}
 		}
 	}
 }
