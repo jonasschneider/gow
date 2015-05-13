@@ -63,7 +63,6 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, backendAddress string)
 
 	if r.Header["Connection"] != nil && r.Header["Connection"][0] == "Upgrade" &&
 		r.Header["Upgrade"] != nil && r.Header["Upgrade"][0] == "websocket" {
-		log.Println("websocket connection requested by client; doing things")
 		proxyWebsocket(w, r, backendAddress)
 		return
 	}
@@ -92,16 +91,11 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, backendAddress string)
 func proxyWebsocket(w http.ResponseWriter, clientRequest *http.Request, backendAddress string) {
 	clientRequest.URL.Scheme = "ws"
 
-	log.Println("setting it")
-
 	f := func(theNet, addr string) (net.Conn, error) {
 		return net.Dial(theNet, backendAddress)
 	}
 
-	log.Println("made literal")
 	d := websocket.Dialer{NetDial: f}
-
-	log.Println("set it")
 
 	upstream_conn, resp, err := d.Dial(clientRequest.URL.String(), clientRequest.Header)
 	if err != nil {
