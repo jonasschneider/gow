@@ -62,6 +62,7 @@ func (b *Backend) IsRestartRequested() bool {
 type BootCrash struct {
 	Log bytes.Buffer
 	Env []string
+	Cmd string
 }
 func (b BootCrash) Error() string {
 	return "app crashed during boot"
@@ -92,6 +93,16 @@ func SpawnBackend(appName string) (*Backend, error) {
 		gobin = "."
 	}
 	cmd := exec.Command(gobin+"/forego", "start", "-p", strconv.Itoa(port), "web")
+	procfile, err := ReadProcfile(pathToApp+"/Procfile")
+	if err != nil {
+		log.Println("while parsing procfile:", err)
+	}
+	var CmdName string
+	for _, v := range procfile.Entries {
+		if v.Name == "web" {
+			CmdName = v.Command
+		}
+	}
 
 	var bootlog bytes.Buffer
 
@@ -115,7 +126,7 @@ func SpawnBackend(appName string) (*Backend, error) {
 		b.exited = true
 
 		if booting {
-			crashChan <- BootCrash{Log: bootlog, Env: env}
+			crashChan <- BootCrash{Log: bootlog, Env: env, Cmd: CmdName}
 		}
 	}()
 

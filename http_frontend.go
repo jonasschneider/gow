@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -45,7 +46,12 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
 				w.Header()["Content-Type"] = []string{"text/html"}
 				w.WriteHeader(500)
 
-				w.Write([]byte("<h1>App crashed during boot :(</h1><pre id=log>"))
+				w.Write([]byte("<h1>App crashed during boot :(</h1>"))
+				i := strings.Index(r.Host, ".")
+				path := r.Host[0:i]
+				w.Write([]byte("Tried to run:<pre><span style='opacity:0.5'>  "+path+"$ </span>"+crash.Cmd+"</pre>"))
+
+				w.Write([]byte("<pre id=log>"))
 				crash.Log.WriteTo(w)
 				w.Write([]byte("</pre>"))
 				w.Write([]byte("<h2>Environment</h2><pre>"))
