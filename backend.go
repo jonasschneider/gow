@@ -85,7 +85,7 @@ func SpawnBackend(appName string) (*Backend, error) {
 	} else {
 		log.Println("while reading path file:", err)
 	}
-	env = append(env, "PATH="+path)
+	env = append([]string{"PATH="+path}, env...)
 
 	gobin, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
