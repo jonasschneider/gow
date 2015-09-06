@@ -48,6 +48,13 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
 				w.Write([]byte("<h1>App crashed during boot :(</h1><pre id=log>"))
 				crash.Log.WriteTo(w)
 				w.Write([]byte("</pre>"))
+				w.Write([]byte("<h2>Environment</h2><pre>"))
+				for _, e := range crash.Env {
+					w.Write([]byte(e))
+					w.Write([]byte("\n"))
+				}
+				w.Write([]byte("</pre>"))
+
 				w.Write([]byte(terminalFormattingPostamble))
 			} else {
 				w.WriteHeader(500)

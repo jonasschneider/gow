@@ -61,6 +61,7 @@ func (b *Backend) IsRestartRequested() bool {
 
 type BootCrash struct {
 	Log bytes.Buffer
+	Env []string
 }
 func (b BootCrash) Error() string {
 	return "app crashed during boot"
@@ -114,7 +115,7 @@ func SpawnBackend(appName string) (*Backend, error) {
 		b.exited = true
 
 		if booting {
-			crashChan <- BootCrash{Log: bootlog}
+			crashChan <- BootCrash{Log: bootlog, Env: env}
 		}
 	}()
 
