@@ -24,6 +24,7 @@ type Backend struct {
 	process      *os.Process
 	startedAt    time.Time
 	exited       bool
+	exitChan 		 chan interface{}
 	activityChan chan interface{}
 }
 
@@ -35,11 +36,8 @@ func (b *Backend) Close() {
 		log.Println("failed to kill process: ", err)
 		return
 	}
-	_, err = b.process.Wait()
-	if err != nil {
-		log.Println("failed to wait for process: ", err)
-		return
-	}
+
+	<-b.exitChan
 
 	log.Println("Terminated", b.appPath)
 }
@@ -133,12 +131,14 @@ func SpawnBackend(appName string) (*Backend, error) {
 		return nil, err
 	}
 
-	b := &Backend{appPath: pathToApp, port: port, process: cmd.Process, startedAt: time.Now(), activityChan: make(chan interface{})}
+	exitChan := make(chan interface{}, 1)
+	b := &Backend{appPath: pathToApp, port: port, process: cmd.Process, startedAt: time.Now(), activityChan: make(chan interface{}), exitChan: exitChan}
 	booting := true
 	crashChan := make(chan error, 1)
 	go func() {
 		cmd.Wait()
 		b.exited = true
+		b.exitChan <- new(interface{})
 
 		if booting {
 			crashChan <- BootCrash{Log: bootlog, Env: env, Cmd: CmdName, Path: pathToApp}
