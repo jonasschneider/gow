@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -99,65 +100,98 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, backendAddress string)
 	}
 }
 
-func proxyWebsocket(w http.ResponseWriter, clientRequest *http.Request, backendAddress string) {
-	clientRequest.URL.Scheme = "ws"
+// Portions from https://github.com/koding/websocketproxy
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
 
-	f := func(theNet, addr string) (net.Conn, error) {
-		return net.Dial(theNet, backendAddress)
+var dialer = websocket.DefaultDialer
+
+func proxyWebsocket(w http.ResponseWriter, req *http.Request, backendAddress string) {
+	backendURL := *req.URL
+	backendURL.Scheme = "ws"
+	backendURL.Host = backendAddress
+
+	// Pass headers from the incoming request to the dialer to forward them to
+	// the final destinations.
+	requestHeader := http.Header{}
+	requestHeader.Add("Origin", req.Header.Get("Origin"))
+	for _, prot := range req.Header[http.CanonicalHeaderKey("Sec-WebSocket-Protocol")] {
+		requestHeader.Add("Sec-WebSocket-Protocol", prot)
+	}
+	for _, cookie := range req.Header[http.CanonicalHeaderKey("Cookie")] {
+		requestHeader.Add("Cookie", cookie)
 	}
 
-	d := websocket.Dialer{NetDial: f}
+	// Pass X-Forwarded-For headers too, code below is a part of
+	// httputil.ReverseProxy. See http://en.wikipedia.org/wiki/X-Forwarded-For
+	// for more information
+	// TODO: use RFC7239 http://tools.ietf.org/html/rfc7239
+	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+		// If we aren't the first proxy retain prior
+		// X-Forwarded-For information as a comma+space
+		// separated list and fold multiple headers into one.
+		if prior, ok := req.Header["X-Forwarded-For"]; ok {
+			clientIP = strings.Join(prior, ", ") + ", " + clientIP
+		}
+		requestHeader.Set("X-Forwarded-For", clientIP)
+	}
 
-	upstream_conn, resp, err := d.Dial(clientRequest.URL.String(), clientRequest.Header)
+	// Set the originating protocol of the incoming HTTP request. The SSL might
+	// be terminated on our site and because we doing proxy adding this would
+	// be helpful for applications on the backend.
+	requestHeader.Set("X-Forwarded-Proto", "http")
+	if req.TLS != nil {
+		requestHeader.Set("X-Forwarded-Proto", "https")
+	}
+
+	// Connect to the backend URL, also pass the headers we get from the requst
+	// together with the Forwarded headers we prepared above.
+	// TODO: support multiplexing on the same backend connection instead of
+	// opening a new TCP connection time for each request. This should be
+	// optional:
+	// http://tools.ietf.org/html/draft-ietf-hybi-websocket-multiplexing-01
+	connBackend, resp, err := dialer.Dial(backendURL.String(), requestHeader)
 	if err != nil {
 		log.Println(err, resp)
 		w.WriteHeader(502)
 		w.Write([]byte{})
 		return
 	}
+	defer connBackend.Close()
 
-	for k := range hopHeaders {
-		delete(resp.Header, hopHeaders[k])
-	}
+	// Only pass those headers to the upgrader.
+	upgradeHeader := http.Header{}
+	upgradeHeader.Set("Sec-WebSocket-Protocol",
+		resp.Header.Get(http.CanonicalHeaderKey("Sec-WebSocket-Protocol")))
+	upgradeHeader.Set("Set-Cookie",
+		resp.Header.Get(http.CanonicalHeaderKey("Set-Cookie")))
 
-	client_conn, err := websocket.Upgrade(w, clientRequest, resp.Header, 4096, 4096)
+	// Now upgrade the existing incoming request to a WebSocket connection.
+	// Also pass the header that we gathered from the Dial handshake.
+	connPub, err := upgrader.Upgrade(w, req, upgradeHeader)
 	if err != nil {
 		log.Println(err)
 		w.WriteHeader(502)
 		w.Write([]byte{})
 		return
 	}
+	defer connPub.Close()
 
-	go func() {
-		for {
-			messageType, p, err := client_conn.ReadMessage()
-			if err != nil {
-				log.Println("error while reading from client:", err)
-				break
-			}
-			if err = upstream_conn.WriteMessage(messageType, p); err != nil {
-				log.Println("error while writing to upstream:", err)
-				break
-			}
-		}
-		upstream_conn.Close()
-	}()
+	errc := make(chan error, 2)
+	cp := func(dst io.Writer, src io.Reader) {
+		_, err := io.Copy(dst, src)
+		errc <- err
+	}
 
-	go func() {
-		for {
-			messageType, p, err := upstream_conn.ReadMessage()
-			if err != nil {
-				log.Println("error while reading from upstream:", err)
-				break
-			}
-			if err = client_conn.WriteMessage(messageType, p); err != nil {
-				log.Println("error while writing to client:", err)
-				break
-			}
-		}
-
-		client_conn.Close()
-	}()
+	// Start our proxy now, everything is ready...
+	go cp(connBackend.UnderlyingConn(), connPub.UnderlyingConn())
+	go cp(connPub.UnderlyingConn(), connBackend.UnderlyingConn())
+	<-errc
 }
 
 func writeResponseHeader(w http.ResponseWriter, r *http.Response) {

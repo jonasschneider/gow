@@ -20,15 +20,27 @@ import (
 
 type Backend struct {
 	appPath      string
+	host         string
 	port         int
+	proxy        bool
 	process      *os.Process
 	startedAt    time.Time
 	exited       bool
-	exitChan 		 chan interface{}
+	exitChan     chan interface{}
 	activityChan chan interface{}
 }
 
 func (b *Backend) Close() {
+	if b.proxy {
+		log.Println("Terminating", b.appPath, "proxy")
+
+		b.exitChan <- true
+
+		<-b.exitChan
+
+		log.Println("Terminated", b.appPath)
+		return
+	}
 	log.Println("Terminating", b.appPath, "pid", b.process.Pid)
 
 	err := b.process.Signal(syscall.SIGTERM)
@@ -45,6 +57,13 @@ func (b *Backend) Close() {
 func (b *Backend) IsRestartRequested() bool {
 	if b.exited {
 		return true
+	}
+	if b.proxy {
+		fi, err := os.Stat(b.appPath)
+		if err != nil {
+			return false
+		}
+		return fi.ModTime().After(b.startedAt)
 	}
 	fi, err := os.Stat(b.appPath + "/tmp/restart.txt")
 	if err != nil {
@@ -66,8 +85,23 @@ func (b BootCrash) Error() string {
 func SpawnBackend(appName string) (*Backend, error) {
 	pathToApp, err := appDir(appName)
 	if err != nil {
+		dotIndex := strings.Index(appName, ".")
+		if dotIndex != -1 {
+			return SpawnBackend(appName[dotIndex+1:len(appName)])
+		}
 		return nil, err
 	}
+	fileInfo, err := os.Stat(pathToApp)
+	if err != nil {
+		return nil, err
+	}
+	if (fileInfo.IsDir()) {
+		return SpawnBackendProcfile(pathToApp)
+	}
+	return SpawnBackendProxy(pathToApp)
+}
+
+func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
 	port, err := getFreeTCPPort()
 	if err != nil {
 		return nil, err
@@ -132,7 +166,7 @@ func SpawnBackend(appName string) (*Backend, error) {
 	}
 
 	exitChan := make(chan interface{}, 1)
-	b := &Backend{appPath: pathToApp, port: port, process: cmd.Process, startedAt: time.Now(), activityChan: make(chan interface{}), exitChan: exitChan}
+	b := &Backend{appPath: pathToApp, host: "127.0.0.1", port: port, proxy: false, process: cmd.Process, startedAt: time.Now(), activityChan: make(chan interface{}), exitChan: exitChan}
 	booting := true
 	crashChan := make(chan error, 1)
 	go func() {
@@ -164,6 +198,53 @@ func SpawnBackend(appName string) (*Backend, error) {
 	}
 }
 
+func SpawnBackendProxy(pathToApp string) (*Backend, error) {
+	appbytes, err := ioutil.ReadFile(pathToApp)
+	app := ""
+	if err == nil {
+		app = strings.TrimSpace(string(appbytes))
+	} else {
+		log.Println("while reading app file:", err)
+	}
+
+	if (strings.HasPrefix(app, "http://")) {
+		app = app[7:len(app)]
+	} else {
+		app = "127.0.0.1:" + app
+	}
+
+	host, portstring, err := net.SplitHostPort(app)
+	if err != nil {
+		return nil, err
+	}
+
+	port, err := strconv.Atoi(portstring)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Println("Proxying", pathToApp, "to host", host, "on port", port)
+
+	exitChan := make(chan interface{}, 1)
+	b := &Backend{appPath: pathToApp, host: host, port: port, proxy: true, process: nil, startedAt: time.Now(), activityChan: make(chan interface{}), exitChan: exitChan}
+	go func() {
+		<-b.exitChan
+		b.exited = true
+		b.exitChan <- new(interface{})
+	}()
+
+	select {
+	case <-awaitTCP(b.Address()):
+		log.Println(pathToApp, "came up successfully")
+		go b.watchForActivity()
+
+		return b, nil
+	case <-time.After(30 * time.Second):
+		log.Println(pathToApp, "failed to bind")
+		return nil, errors.New("app failed to bind")
+	}
+}
+
 func (b *Backend) Touch() {
 	if b.activityChan != nil {
 		b.activityChan <- new(interface{})
@@ -171,7 +252,7 @@ func (b *Backend) Touch() {
 }
 
 func (b *Backend) Address() string {
-	return "127.0.0.1:" + strconv.Itoa(b.port)
+	return net.JoinHostPort(b.host, strconv.Itoa(b.port))
 }
 
 // Close the backend after inactivity
