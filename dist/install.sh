@@ -14,9 +14,7 @@ mkdir -p "$HOME/.pow"
 # save PATH so we can reuse it later
 echo "$PATH" > "$HOME/.pow/.path"
 
-go get github.com/jonasschneider/gow/gowd
-go get github.com/ddollar/forego
-go install github.com/jonasschneider/gow/gowd
+go install github.com/jonasschneider/gow
 go install github.com/ddollar/forego
 
 sudo tee /Library/LaunchDaemons/com.jonasschneider.gow.firewall.plist > /dev/null <<END
@@ -71,7 +69,7 @@ END
 
 cat > "$HOME/.pow/.run" <<END
 #!/bin/sh
-exec $GOPATH/bin/gowd > "$HOME/Library/Logs/gowd.log" 2>&1
+exec $GOPATH/bin/gow > "$HOME/Library/Logs/gowd.log" 2>&1
 END
 
 chmod +x "$HOME/.pow/.run"

@@ -1,4 +1,4 @@
-package gow
+package main
 
 import (
 	"errors"
@@ -63,18 +63,22 @@ type BootCrash struct {
 	Log bytes.Buffer
 	Env []string
 	Cmd string
+	Path string
 }
 func (b BootCrash) Error() string {
 	return "app crashed during boot"
 }
 
 func SpawnBackend(appName string) (*Backend, error) {
-	pathToApp := appDir(appName)
-	port, err := getFreeTCPPort()
-	log.Println("Spawning", pathToApp, "on port", port)
+	pathToApp, err := appDir(appName)
 	if err != nil {
 		return nil, err
 	}
+	port, err := getFreeTCPPort()
+	if err != nil {
+		return nil, err
+	}
+	log.Println("Spawning", pathToApp, "on port", port)
 
 	env := os.Environ()
 
@@ -126,7 +130,7 @@ func SpawnBackend(appName string) (*Backend, error) {
 		b.exited = true
 
 		if booting {
-			crashChan <- BootCrash{Log: bootlog, Env: env, Cmd: CmdName}
+			crashChan <- BootCrash{Log: bootlog, Env: env, Cmd: CmdName, Path: pathToApp}
 		}
 	}()
 
@@ -208,6 +212,7 @@ func getFreeTCPPort() (port int, err error) {
 	return port, nil
 }
 
-func appDir(name string) string {
-	return os.Getenv("HOME") + "/.pow/" + name
+func appDir(name string) (path string, err error) {
+	path, err = filepath.EvalSymlinks(os.Getenv("HOME") + "/.pow/" + name)
+	return
 }

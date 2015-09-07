@@ -1,7 +1,9 @@
 #!/bin/bash
 set -eux
 
+# remove our crap
 rm "$HOME/.pow/.path"
+rm "$HOME/.pow/.run"
 
 #
 # Firewall

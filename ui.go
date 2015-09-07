@@ -1,4 +1,4 @@
-package gow
+package main
 
 var terminalFormattingPostamble = `<script>
 var Filter, STYLES, defaults, entities, extend, toHexString, _i, _results,

@@ -1,4 +1,4 @@
-package gow
+package main
 
 import (
   "bufio"
