@@ -10,6 +10,11 @@ elif [ "$(expr "$(sw_vers -productVersion | cut -f 2 -d .)" \>= 6)" = 0 ]; then
   exit 1
 fi
 
+if [ -z "$GOPATH" ]; then
+  echo "Please install Go first. You can try 'brew install golang && export GOPATH=\"$HOME/go\"'" >&2
+  exit 1
+fi
+
 mkdir -p "$HOME/.pow"
 # save PATH so we can reuse it later
 echo "$PATH" > "$HOME/.pow/.path"
