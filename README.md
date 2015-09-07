@@ -1,5 +1,5 @@
-Gow: A development server for `Procfile` apps
-=============================================
+Gow: A dev environment for `Procfile` apps
+==========================================
 
 Synopsis
 --------
