@@ -2,17 +2,20 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"os/exec"
+	"syscall"
 	"path/filepath"
 	"strconv"
 	"time"
 	"bytes"
 	"io"
+	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 type Backend struct {
@@ -27,23 +30,16 @@ type Backend struct {
 func (b *Backend) Close() {
 	log.Println("Terminating", b.appPath, "pid", b.process.Pid)
 
-	done := make(chan interface{})
-
-	go func() {
-		b.process.Wait()
-		close(done)
-	}()
-
-	// so sorry for this: SIGTERM the forego child process, not (a) forego itself, and (b) not the shell forego spawns
-	shellcmd := fmt.Sprintf("/usr/local/bin/pstree %d|sed 's/^[^0-9]*//'| grep -v forego| grep -v .profile | cut -d ' ' -f 1|xargs kill; echo done", b.process.Pid)
-	cmd := exec.Command("bash", "-c", shellcmd)
-	out, err := cmd.CombinedOutput()
+	err := b.process.Signal(syscall.SIGTERM)
 	if err != nil {
-		log.Println("failed to kill process: ", err, string(out))
+		log.Println("failed to kill process: ", err)
 		return
 	}
-
-	<-done
+	_, err = b.process.Wait()
+	if err != nil {
+		log.Println("failed to wait for process: ", err)
+		return
+	}
 
 	log.Println("Terminated", b.appPath)
 }
@@ -89,17 +85,26 @@ func SpawnBackend(appName string) (*Backend, error) {
 	} else {
 		log.Println("while reading path file:", err)
 	}
-	env = append([]string{"PATH="+path}, env...)
-
-	gobin, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		log.Println("while determining GOPATH:", err)
-		gobin = "."
+	// remove the old PATH
+	for i, v := range env {
+		if strings.Index(v, "PATH=") == 0 {
+			env = append(env[:i], env[i+1:]...)
+		}
 	}
-	cmd := exec.Command(gobin+"/forego", "start", "-p", strconv.Itoa(port), "web")
+	env = append(env, "PATH="+path, "PORT="+strconv.Itoa(port))
+
+	// add .env
+	entries, err := godotenv.Read(pathToApp+"/.env")
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range entries {
+		env = append(env, k+"="+v)
+	}
+
 	procfile, err := ReadProcfile(pathToApp+"/Procfile")
 	if err != nil {
-		log.Println("while parsing procfile:", err)
+		return nil, err
 	}
 	var CmdName string
 	for _, v := range procfile.Entries {
@@ -107,6 +112,12 @@ func SpawnBackend(appName string) (*Backend, error) {
 			CmdName = v.Command
 		}
 	}
+
+	if CmdName == "" {
+		return nil, errors.New("No 'web' entry found in Procfile")
+	}
+
+	cmd := exec.Command("bash", "-c", "exec "+CmdName)
 
 	var bootlog bytes.Buffer
 

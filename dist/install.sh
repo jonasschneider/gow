@@ -15,7 +15,6 @@ mkdir -p "$HOME/.pow"
 echo "$PATH" > "$HOME/.pow/.path"
 
 go install github.com/jonasschneider/gow
-go install github.com/ddollar/forego
 
 sudo tee /Library/LaunchDaemons/com.jonasschneider.gow.firewall.plist > /dev/null <<END
 <?xml version="1.0" encoding="UTF-8"?>
