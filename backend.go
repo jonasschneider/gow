@@ -80,8 +80,6 @@ func SpawnBackend(appName string) (*Backend, error) {
 	path := os.Getenv("PATH")
 	if err == nil {
 		path = string(pathbytes)
-	} else {
-		log.Println("while reading path file:", err)
 	}
 	// remove the old PATH
 	for i, v := range env {
@@ -93,12 +91,17 @@ func SpawnBackend(appName string) (*Backend, error) {
 
 	// add .env
 	entries, err := godotenv.Read(pathToApp+"/.env")
-	if err != nil {
-		return nil, err
+	if err == nil {
+		for k, v := range entries {
+			env = append(env, k+"="+v)
+		}
+	} else {
+		// allow absence of .env
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
 	}
-	for k, v := range entries {
-		env = append(env, k+"="+v)
-	}
+
 
 	procfile, err := ReadProcfile(pathToApp+"/Procfile")
 	if err != nil {
