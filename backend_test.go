@@ -6,6 +6,7 @@ import (
   "io/ioutil"
   "log"
   "net/http"
+  "fmt"
 )
 
 func TestSimpleBackendSpawn(t *testing.T) {
@@ -46,6 +47,27 @@ func TestEnv(t *testing.T) {
     }
 
     b.Close()
+}
+
+func TestProxy(t *testing.T) {
+  http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintf(w, "hi from proxy backend\n")
+  })
+  go http.ListenAndServe(":20202", nil)
+
+  err := ioutil.WriteFile(Tempdir+"/.pow/app3", []byte("http://localhost:20202\n"), 0700)
+  if err != nil { t.Fatal(err) }
+  b, err := SpawnBackend("app3")
+  if err != nil { t.Fatal(err) }
+  resp, err := http.Get("http://"+b.Address()+"/")
+  if err != nil { t.Fatal(err) }
+  body, err := ioutil.ReadAll(resp.Body)
+  if err != nil { t.Fatal(err) }
+  if string(body) != "hi from proxy backend\n" {
+    t.Fatal("body should have been 'hi from proxy backend\\n', but was:",string(body),body)
+  }
+
+  b.Close()
 }
 
 
