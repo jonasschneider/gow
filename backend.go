@@ -1,19 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"os/exec"
-	"syscall"
 	"path/filepath"
 	"strconv"
-	"time"
-	"bytes"
-	"io"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -73,11 +73,12 @@ func (b *Backend) IsRestartRequested() bool {
 }
 
 type BootCrash struct {
-	Log bytes.Buffer
-	Env []string
-	Cmd string
+	Log  bytes.Buffer
+	Env  []string
+	Cmd  string
 	Path string
 }
+
 func (b BootCrash) Error() string {
 	return "app crashed during boot"
 }
@@ -91,7 +92,7 @@ func SpawnBackend(appName string) (*Backend, error) {
 	if err != nil {
 		return nil, err
 	}
-	if (fileInfo.IsDir()) {
+	if fileInfo.IsDir() {
 		return SpawnBackendProcfile(pathToApp)
 	}
 	return SpawnBackendProxy(pathToApp)
@@ -120,7 +121,7 @@ func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
 	env = append(env, "PATH="+path, "PORT="+strconv.Itoa(port))
 
 	// add .env
-	entries, err := godotenv.Read(pathToApp+"/.env")
+	entries, err := godotenv.Read(pathToApp + "/.env")
 	if err == nil {
 		for k, v := range entries {
 			env = append(env, k+"="+v)
@@ -132,8 +133,7 @@ func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
 		}
 	}
 
-
-	procfile, err := ReadProcfile(pathToApp+"/Procfile")
+	procfile, err := ReadProcfile(pathToApp + "/Procfile")
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func SpawnBackendProxy(pathToApp string) (*Backend, error) {
 		log.Println("while reading app file:", err)
 	}
 
-	if (strings.HasPrefix(app, "http://")) {
+	if strings.HasPrefix(app, "http://") {
 		app = app[7:len(app)]
 	} else {
 		app = "127.0.0.1:" + app

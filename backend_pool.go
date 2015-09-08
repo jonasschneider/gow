@@ -2,8 +2,8 @@ package main
 
 import (
 	"log"
-	"sync"
 	"strings"
+	"sync"
 )
 
 type BackendPool struct {
@@ -70,13 +70,13 @@ func (p *BackendPool) Close() {
 }
 
 func appNameFromHost(host string) string {
-	return appNameWithoutSubdomains(host[0:len(host)-4])
+	return appNameWithoutSubdomains(host[0 : len(host)-4])
 }
 
 func appNameWithoutSubdomains(host string) string {
 	dotIndex := strings.Index(host, ".")
 	if dotIndex != -1 {
-		return appNameWithoutSubdomains(host[dotIndex+1:len(host)])
+		return appNameWithoutSubdomains(host[dotIndex+1 : len(host)])
 	} else {
 		return host
 	}

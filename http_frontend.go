@@ -3,8 +3,8 @@ package main
 import (
 	"io"
 	"log"
-	"net/http"
 	"net"
+	"net/http"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -47,7 +47,7 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
 				w.WriteHeader(500)
 
 				w.Write([]byte("<h1>App crashed during boot :(</h1>"))
-				w.Write([]byte("<blockquote><pre><span style='opacity:0.5'>"+crash.Path+"$ </span><strong>"+crash.Cmd+"</strong>\n</pre>"))
+				w.Write([]byte("<blockquote><pre><span style='opacity:0.5'>" + crash.Path + "$ </span><strong>" + crash.Cmd + "</strong>\n</pre>"))
 
 				w.Write([]byte("<pre id=log>"))
 				crash.Log.WriteTo(w)
