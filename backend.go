@@ -85,10 +85,6 @@ func (b BootCrash) Error() string {
 func SpawnBackend(appName string) (*Backend, error) {
 	pathToApp, err := appDir(appName)
 	if err != nil {
-		dotIndex := strings.Index(appName, ".")
-		if dotIndex != -1 {
-			return SpawnBackend(appName[dotIndex+1:len(appName)])
-		}
 		return nil, err
 	}
 	fileInfo, err := os.Stat(pathToApp)
