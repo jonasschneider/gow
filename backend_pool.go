@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"regexp"
 	"sync"
 )
 
@@ -69,8 +68,6 @@ func (p *BackendPool) Close() {
 	}
 }
 
-var hostRegex = regexp.MustCompile("([a-z_\\-0-9A-Z]+)")
-
 func appNameFromHost(host string) string {
-	return hostRegex.FindString(host)
+	return host[0:len(host)-4]
 }
