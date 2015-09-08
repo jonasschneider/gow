@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eux
+set -eu
 
 # Fail fast if we're not on OS X >= 10.6.0. (Snippets taken from Pow.)
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -7,6 +7,11 @@ if [ "$(uname -s)" != "Darwin" ]; then
   exit 1
 elif [ "$(expr "$(sw_vers -productVersion | cut -f 2 -d .)" \>= 6)" = 0 ]; then
   echo "This script requires Mac OS X 10.6 or later." >&2
+  exit 1
+fi
+
+if [ -e /etc/resolver/dev ]; then
+  echo "Either Pow is still installed, or Gow is already installed. Check http://pow.cx/manual.html#section_1.2 or https://github.com/jonasschneider/gow"
   exit 1
 fi
 

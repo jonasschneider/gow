@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eux
+set -eu
 
 # remove our crap
 rm "$HOME/.pow/.path"
@@ -25,6 +25,5 @@ sudo rm -f /etc/resolver/dev
 launchctl unload "$HOME/Library/LaunchAgents/com.jonasschneider.gow.gowd.plist"
 rm -f "$HOME/Library/LaunchAgents/com.jonasschneider.gow.gowd.plist"
 rm -f "$HOME/.pow/.run"
-
 
 echo "*** Uninstalled"
