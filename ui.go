@@ -1,5 +1,39 @@
 package main
 
+import (
+  "net/http"
+  "log"
+)
+
+func writeErrorPage(w http.ResponseWriter, err error) {
+  log.Println(err)
+  w.Header()["Content-Type"] = []string{"text/html"}
+  w.WriteHeader(502)
+
+  crash, isCrash := err.(BootCrash)
+  if isCrash {
+    w.Write([]byte("<h1>Your app failed to start :(</h1>"))
+    w.Write([]byte("<blockquote><pre><span style='opacity:0.5'>" + crash.Path + "$ </span><strong>" + crash.Cmd + "</strong>\n</pre>"))
+
+    w.Write([]byte("<pre id=log>"))
+    crash.Log.WriteTo(w)
+    w.Write([]byte("</pre></blockquote>"))
+
+    w.Write([]byte("<h2>Environment</h2><blockquote><pre>"))
+    for _, e := range crash.Env {
+      w.Write([]byte(e))
+      w.Write([]byte("\n"))
+    }
+    w.Write([]byte("</pre></blockquote>"))
+
+    w.Write([]byte(terminalFormattingPostamble))
+  } else {
+    w.WriteHeader(500)
+    w.Write([]byte("An error occured while Gow tried to handle your request: "))
+    w.Write([]byte(err.Error()))
+  }
+}
+
 var terminalFormattingPostamble = `<script>
 var Filter, STYLES, defaults, entities, extend, toHexString, _i, _results,
     __slice = [].slice;

@@ -41,31 +41,7 @@ func makeProxyHandlerFunc(sel BackendSelector) func(http.ResponseWriter, *http.R
 		if err == nil {
 			proxyRequest(w, r, backend)
 		} else {
-			crash, ok := err.(BootCrash)
-			if ok {
-				w.Header()["Content-Type"] = []string{"text/html"}
-				w.WriteHeader(500)
-
-				w.Write([]byte("<h1>App crashed during boot :(</h1>"))
-				w.Write([]byte("<blockquote><pre><span style='opacity:0.5'>" + crash.Path + "$ </span><strong>" + crash.Cmd + "</strong>\n</pre>"))
-
-				w.Write([]byte("<pre id=log>"))
-				crash.Log.WriteTo(w)
-				w.Write([]byte("</pre></blockquote>"))
-
-				w.Write([]byte("<h2>Environment</h2><blockquote><pre>"))
-				for _, e := range crash.Env {
-					w.Write([]byte(e))
-					w.Write([]byte("\n"))
-				}
-				w.Write([]byte("</pre></blockquote>"))
-
-				w.Write([]byte(terminalFormattingPostamble))
-			} else {
-				w.WriteHeader(500)
-				w.Write([]byte("Failed to spawn backend: "))
-				w.Write([]byte(err.Error()))
-			}
+			writeErrorPage(w, err)
 		}
 	}
 }
@@ -85,9 +61,7 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, backendAddress string)
 	resp, err := http.DefaultTransport.RoundTrip(r)
 
 	if err != nil {
-		log.Println(err)
-		w.WriteHeader(502)
-		w.Write([]byte{})
+		writeErrorPage(w, err)
 		return
 	}
 
