@@ -28,6 +28,8 @@ func (p *BackendPool) Select(host string) (string, error) {
 	err = backend.MaybeSpawnBackend()
 
 	if err != nil {
+		p.backends[name] = nil
+		backend.Close()
 		return "", err
 	}
 

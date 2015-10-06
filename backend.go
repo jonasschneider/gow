@@ -280,7 +280,7 @@ func (b *Backend) SpawnBackendProxy() error {
 		go b.watchForActivity()
 
 		return nil
-	case <-time.After(30 * time.Second):
+	case <-time.After(5 * time.Second):
 		log.Println(b.appPath, "failed to bind")
 		return errors.New("app failed to bind")
 	}
