@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,10 +21,12 @@ import (
 
 type Backend struct {
 	appPath      string
+	mtx          sync.Mutex
 	host         string
 	port         int
 	proxy        bool
 	process      *os.Process
+	spawned      bool
 	startedAt    time.Time
 	exited       bool
 	exitChan     chan interface{}
@@ -72,6 +75,18 @@ func (b *Backend) IsRestartRequested() bool {
 	return fi.ModTime().After(b.startedAt)
 }
 
+func IsSpawnableBackend(appName string) bool {
+	pathToApp, err := appDir(appName)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(pathToApp)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
 type BootCrash struct {
 	Log  bytes.Buffer
 	Env  []string
@@ -83,7 +98,7 @@ func (b BootCrash) Error() string {
 	return "app crashed during boot"
 }
 
-func SpawnBackend(appName string) (*Backend, error) {
+func InitBackend(appName string) (*Backend, error) {
 	pathToApp, err := appDir(appName)
 	if err != nil {
 		return nil, err
@@ -93,17 +108,32 @@ func SpawnBackend(appName string) (*Backend, error) {
 		return nil, err
 	}
 	if fileInfo.IsDir() {
-		return SpawnBackendProcfile(pathToApp)
+		return &Backend{appPath: pathToApp, proxy: false, spawned: false}, nil
 	}
-	return SpawnBackendProxy(pathToApp)
+	return &Backend{appPath: pathToApp, proxy: true, spawned: false}, nil
 }
 
-func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
+func (b *Backend) MaybeSpawnBackend() error {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+
+	if b.spawned == true {
+		return nil
+	}
+
+	if b.proxy == false {
+		return b.SpawnBackendProcfile()
+	}
+
+	return b.SpawnBackendProxy()
+}
+
+func (b *Backend) SpawnBackendProcfile() error {
 	port, err := getFreeTCPPort()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	log.Println("Spawning", pathToApp, "on port", port)
+	log.Println("Spawning", b.appPath, "on port", port)
 
 	env := os.Environ()
 
@@ -121,7 +151,7 @@ func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
 	env = append(env, "PATH="+path, "PORT="+strconv.Itoa(port))
 
 	// add .env
-	entries, err := godotenv.Read(pathToApp + "/.env")
+	entries, err := godotenv.Read(b.appPath + "/.env")
 	if err == nil {
 		for k, v := range entries {
 			env = append(env, k+"="+v)
@@ -129,13 +159,13 @@ func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
 	} else {
 		// allow absence of .env
 		if !os.IsNotExist(err) {
-			return nil, err
+			return err
 		}
 	}
 
-	procfile, err := ReadProcfile(pathToApp + "/Procfile")
+	procfile, err := ReadProcfile(b.appPath + "/Procfile")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var CmdName string
 	for _, v := range procfile.Entries {
@@ -145,7 +175,7 @@ func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
 	}
 
 	if CmdName == "" {
-		return nil, errors.New("No 'web' entry found in Procfile")
+		return errors.New("No 'web' entry found in Procfile")
 	}
 
 	cmd := exec.Command("bash", "-c", "exec "+CmdName)
@@ -156,16 +186,22 @@ func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
 
 	cmd.Stdout = toStderrWithCapture // never write to gowd's stdout
 	cmd.Stderr = toStderrWithCapture
-	cmd.Dir = pathToApp
+	cmd.Dir = b.appPath
 	cmd.Env = env
 
 	err = cmd.Start()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	exitChan := make(chan interface{}, 1)
-	b := &Backend{appPath: pathToApp, host: "127.0.0.1", port: port, proxy: false, process: cmd.Process, startedAt: time.Now(), activityChan: make(chan interface{}), exitChan: exitChan}
+	b.host = "127.0.0.1"
+	b.port = port
+	b.process = cmd.Process
+	b.startedAt = time.Now()
+	b.activityChan = make(chan interface{})
+	b.exitChan = exitChan
+	b.spawned = true
 	booting := true
 	crashChan := make(chan error, 1)
 	go func() {
@@ -174,31 +210,31 @@ func SpawnBackendProcfile(pathToApp string) (*Backend, error) {
 		b.exitChan <- new(interface{})
 
 		if booting {
-			crashChan <- BootCrash{Log: bootlog, Env: env, Cmd: CmdName, Path: pathToApp}
+			crashChan <- BootCrash{Log: bootlog, Env: env, Cmd: CmdName, Path: b.appPath}
 		}
 	}()
 
-	log.Println("waiting for spawn result for", pathToApp)
+	log.Println("waiting for spawn result for", b.appPath)
 
 	select {
 	case <-awaitTCP(b.Address()):
-		log.Println(pathToApp, "came up successfully")
+		log.Println(b.appPath, "came up successfully")
 		booting = false
 		go b.watchForActivity()
 
-		return b, nil
+		return nil
 	case <-time.After(30 * time.Second):
-		log.Println(pathToApp, "failed to bind")
+		log.Println(b.appPath, "failed to bind")
 		cmd.Process.Kill()
-		return nil, errors.New("app failed to bind")
+		return errors.New("app failed to bind")
 	case err := <-crashChan:
-		log.Println(pathToApp, "crashed while starting")
-		return nil, err
+		log.Println(b.appPath, "crashed while starting")
+		return err
 	}
 }
 
-func SpawnBackendProxy(pathToApp string) (*Backend, error) {
-	appbytes, err := ioutil.ReadFile(pathToApp)
+func (b *Backend) SpawnBackendProxy() error {
+	appbytes, err := ioutil.ReadFile(b.appPath)
 	app := ""
 	if err == nil {
 		app = strings.TrimSpace(string(appbytes))
@@ -214,18 +250,24 @@ func SpawnBackendProxy(pathToApp string) (*Backend, error) {
 
 	host, portstring, err := net.SplitHostPort(app)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	port, err := strconv.Atoi(portstring)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	log.Println("Proxying", pathToApp, "to host", host, "on port", port)
+	log.Println("Proxying", b.appPath, "to host", host, "on port", port)
 
 	exitChan := make(chan interface{}, 1)
-	b := &Backend{appPath: pathToApp, host: host, port: port, proxy: true, process: nil, startedAt: time.Now(), activityChan: make(chan interface{}), exitChan: exitChan}
+	b.host = host
+	b.port = port
+	b.process = nil
+	b.startedAt = time.Now()
+	b.activityChan = make(chan interface{})
+	b.exitChan = exitChan
+	b.spawned = true
 	go func() {
 		<-b.exitChan
 		b.exited = true
@@ -234,13 +276,13 @@ func SpawnBackendProxy(pathToApp string) (*Backend, error) {
 
 	select {
 	case <-awaitTCP(b.Address()):
-		log.Println(pathToApp, "came up successfully")
+		log.Println(b.appPath, "came up successfully")
 		go b.watchForActivity()
 
-		return b, nil
+		return nil
 	case <-time.After(30 * time.Second):
-		log.Println(pathToApp, "failed to bind")
-		return nil, errors.New("app failed to bind")
+		log.Println(b.appPath, "failed to bind")
+		return errors.New("app failed to bind")
 	}
 }
 
