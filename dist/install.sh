@@ -37,7 +37,10 @@ sudo tee /Library/LaunchDaemons/com.jonasschneider.gow.firewall.plist > /dev/nul
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>echo "rdr pass inet proto tcp from any to self port {80,20559} -> 127.0.0.1 port 20559" | pfctl -a "com.apple/250.PowFirewall" -f - -E</string>
+    <string>
+      sysctl -w net.inet.ip.forwarding=1;
+      echo "rdr pass inet proto tcp from any to self port {80,20559} -> 127.0.0.1 port 20559" | pfctl -a "com.apple/250.PowFirewall" -Ef -
+    </string>
   </array>
   <key>RunAtLoad</key>
   <true/>

@@ -16,27 +16,21 @@ func NewBackendPool() *BackendPool {
 }
 
 func (p *BackendPool) Select(host string) (string, error) {
-	// Yes, we are this crazy. Lock the mutex during the entire lookup time, which could potentially include
-	// (re)spawning an application. Serialize all of this so that we never have to deal with thundering-herd
-	// spawns and such.
-	// TODO: we could at least lock the spawn process by app name
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
+	name := p.findSpawnableAppName(host)
 
-	name := appNameFromHost(host)
 	var err error
-	p.restartIfRequested(name)
+	backend, err := p.maybeInitBackend(name)
 
-	backend := p.backends[name]
+	if err != nil {
+		return "", err
+	}
 
-	if backend == nil {
-		backend, err = SpawnBackend(name)
+	err = backend.MaybeSpawnBackend()
 
-		if err == nil {
-			p.backends[name] = backend
-		} else {
-			return "", err
-		}
+	if err != nil {
+		p.backends[name] = nil
+		backend.Close()
+		return "", err
 	}
 
 	backend.Touch()
@@ -44,23 +38,57 @@ func (p *BackendPool) Select(host string) (string, error) {
 	return backend.Address(), nil
 }
 
-func (p *BackendPool) restartIfRequested(name string) error {
-	if p.backends[name] == nil || !p.backends[name].IsRestartRequested() {
-		return nil
+func (p *BackendPool) maybeInitBackend(name string) (*Backend, error) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+
+	var err error
+	backend := p.backends[name]
+
+	if backend == nil {
+		backend, err = InitBackend(name)
+
+		if err == nil {
+			p.backends[name] = backend
+		} else {
+			return nil, err
+		}
+	} else if backend.IsRestartRequested() {
+		log.Println("restarting", name)
+
+		p.backends[name] = nil
+		backend.Close()
+
+		refreshed_backend, err := InitBackend(name)
+
+		if err != nil {
+			return nil, err
+		}
+
+		p.backends[name] = refreshed_backend
+		backend = refreshed_backend
 	}
-	log.Println("restarting", name)
 
-	p.backends[name].Close()
+	return backend, nil
+}
 
-	refreshed_backend, err := SpawnBackend(name)
-
-	if err != nil {
-		return err
+func (p *BackendPool) findSpawnableAppName(host string) string {
+	name := hostDropLast(host)
+	ok := false
+	for name != "" && ok == false {
+		ok = IsSpawnableBackend(name)
+		if ok == false {
+			if strings.Contains(name, ".") {
+				name = hostDropFirst(name)
+			} else {
+				name = ""
+			}
+		}
 	}
-
-	p.backends[name] = refreshed_backend
-
-	return nil
+	if name == "" {
+		return host
+	}
+	return name
 }
 
 func (p *BackendPool) Close() {
@@ -69,14 +97,19 @@ func (p *BackendPool) Close() {
 	}
 }
 
-func appNameFromHost(host string) string {
-	return appNameWithoutSubdomains(host[0 : len(host)-4])
-}
-
-func appNameWithoutSubdomains(host string) string {
+func hostDropFirst(host string) string {
 	dotIndex := strings.Index(host, ".")
 	if dotIndex != -1 {
-		return appNameWithoutSubdomains(host[dotIndex+1 : len(host)])
+		return host[dotIndex+1 : len(host)]
+	} else {
+		return host
+	}
+}
+
+func hostDropLast(host string) string {
+	dotIndex := strings.LastIndex(host, ".")
+	if dotIndex != -1 {
+		return host[0:dotIndex]
 	} else {
 		return host
 	}
