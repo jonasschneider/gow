@@ -76,7 +76,11 @@ func (p *BackendPool) findSpawnableAppName(host string) string {
 	for name != "" && ok == false {
 		ok = IsSpawnableBackend(name)
 		if ok == false {
-			name = hostDropFirst(name)
+			if strings.Contains(name, ".") {
+				name = hostDropFirst(name)
+			} else {
+				name = ""
+			}
 		}
 	}
 	if name == "" {
